@@ -53,15 +53,15 @@ setMethod("simulate", signature=c(object="HMM"),
     seq[1] <- sample(emissions, 1, hmm@A0[hstates[1]])
     for (i in seq(2, nsim)) {
         # sample a state, using the last state's probabilities
-        hstates[i] <- sample(states, 1,  prob=hmm@A[hstates[i-1], ])
+        hstates[i] <- sample(states, 1, prob=hmm@A[hstates[i-1], ])
         seq[i] <- sample(emissions, 1, prob=hmm@B[hstates[i-1], ])
     }
 
     if (!is.null(dimnames(hmm@B))) {
         # make results labelled factor if emissoin probability matrix
         # has labels
-        seq <- factor(seq, labels=colnames(hmm@B))
-        hstates <- factor(hstates, labels=rownames(hmm@B))
+        seq <- factor(seq, levels=states, labels=colnames(hmm@B))
+        hstates <- factor(hstates, levels=states, labels=rownames(hmm@B))
     }
     list(sequence=seq, states=hstates)
 })
@@ -72,34 +72,18 @@ setMethod("forward", signature=c(hmm="HMM", x="numeric"), function(hmm, x) {
     L <- length(x)
     alpha <- matrix(0, nrow=nrow(hmm@A), ncol=L)
     scaling <- numeric(L)
+    last_alpha <- alpha[, 1] <- hmm@A0# * hmm@B[, x[1]]
 
     # main recursion component
     for (i in seq_along(x)) {
         for (k in states) {
-            if (i == 1) {
-                # initial state is simply initial probs * emissions
-                # for a state and observed symbol
-                alpha_sum <- hmm@A0[k] * hmm@B[k, x[i]]
-            } else {
-                # marginalize over product of last state's
-                # probabilities and transition to this state
-                alpha_sum <- sum(last_alpha * hmm@A[, k])
-            }
-            alpha[k, i] <- alpha_sum * hmm@B[k, x[i]]
+            alpha[k, i] <- sum(last_alpha * hmm@A[, k]) * hmm@B[k, x[i]]
         }
         last_alpha <- alpha[, i]
     }
+    dimnames(alpha) <- list(rownames(hmm@B), seq_along(x))
     return(alpha)
 })
-
-hmm <- HMM(swaps_trans, coin_probs, initial_probs)
-flips <- simulate(hmm, 10)
-
-apply(forward(hmm, flips$sequence), 2, which.max)
-apply(backward(hmm, flips$sequence), 2, which.max)
-flips$sequence
-flips$state
-
 
 setMethod("backward", signature=c(hmm="HMM", x="numeric"), function(hmm, x) {
     # Backward algorithm, with scaling for numerical stability.
@@ -115,32 +99,14 @@ setMethod("backward", signature=c(hmm="HMM", x="numeric"), function(hmm, x) {
         }
         last_beta <- beta[, i]
     }
+    dimnames(beta) <- list(rownames(hmm@B), seq_along(x))
     return(beta)
 })
 
-
-forwardBackward <-
-function(sequence, transitions, emission_probs, initial_probs) {
-    fwd <- forward(sequence, transitions, emission_probs, initial_probs)
-    bwd <- backward(sequence, transitions, emission_probs, initial_probs)
-
-    p_fwd <- sum(transitions[, sequence[length(sequence)]], fwd[, ncol(fwd)])
-    p_bwd <- sum(initial_probs * emission_probs[, sequence[1]] * bwd[, 1])
-
-    posterior <- fwd * bwd / p_fwd
+setMethod("forwardBackward", signature=c("HMM", x="numeric"), function(hmm, x) {
+    fwd <- forward(hmm, x)
+    bwd <- backward(hmm, x)
+    p_fwd <- fwd[, length(x)]
+    posterior <- (fwd * bwd) / sum(p_fwd)
     return(posterior)
-}
-
-
-
-### Coin Flip Simulation
-## simulated biased coin
-swaps_trans <- matrix(c(0.98, 0.02, 0.02, 0.98), nrow=2, ncol=2)
-# H, T
-initial_probs <- c(0.1, 0.9)
-# (fair, biased) x (p(H), p(T))
-coin_probs <- matrix(c(0.5, 0.8, 0.5, 0.2), nrow=2, ncol=2,
-                     dimnames=list(c("F", "B"), c("H", "T")))
-
-hmm <- HMM(swaps_trans, coin_probs, initial_probs)
-flips <- simulate(hmm, 10)
+})
