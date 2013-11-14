@@ -110,3 +110,13 @@ setMethod("forwardBackward", signature=c("HMM", x="numeric"), function(hmm, x) {
     posterior <- (fwd * bwd) / sum(p_fwd)
     return(posterior)
 })
+
+plotPosterior <- function(sims, posterior) {
+    postdf <- data.frame(t(posterior))
+    postdf$max <- factor(apply(postdf, 1, which.max), labels=rownames(posterior))
+    postdf$i <- seq_len(ncol(posterior))
+    postdf$state <- sims$states
+    p <- ggplot(postdf) + geom_line(aes_string(x="i", y=colnames(postdf)[1])) + geom_rug(aes(x=i, color=state))
+    p <- p + ylab(sprintf("posterior probability of %s", colnames(postdf)[1]))
+    p + xlab("index")
+}
