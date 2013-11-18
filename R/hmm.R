@@ -24,7 +24,7 @@ function(A, B, A0, states=NULL, symbols=NULL) {
 }
 
 setGeneric("forward", function(hmm, x) standardGeneric("forward"))
-setGeneric("backward", function(hmm, x) standardGeneric("backward"))
+setGeneric("backward", function(hmm, x, scaling) standardGeneric("backward"))
 setGeneric("forwardBackward", function(hmm, x) standardGeneric("forwardBackward"))
 
 setMethod("show", "HMM", function(object) {
@@ -79,13 +79,14 @@ setMethod("forward", signature=c(hmm="HMM", x="numeric"), function(hmm, x) {
         for (k in states) {
             alpha[k, i] <- sum(last_alpha * hmm@A[, k]) * hmm@B[k, x[i]]
         }
-        last_alpha <- alpha[, i]
+        scaling[i] <- c_i <- sum(alpha[, i])
+        last_alpha <- alpha[, i] <- alpha[, i]/c_i
     }
     dimnames(alpha) <- list(rownames(hmm@B), seq_along(x))
-    return(alpha)
+    return(list(alpha=alpha, scaling=1/scaling))
 })
 
-setMethod("backward", signature=c(hmm="HMM", x="numeric"), function(hmm, x) {
+setMethod("backward", signature=c(hmm="HMM", x="numeric"), function(hmm, x, scaling) {
     # Backward algorithm, with scaling for numerical stability.
     states <- seq_len(nrow(hmm@A))
     L <- length(x)
@@ -97,7 +98,7 @@ setMethod("backward", signature=c(hmm="HMM", x="numeric"), function(hmm, x) {
         for (k in states) {
             beta[k, i] <- sum(hmm@B[, x[i+1]] * last_beta * hmm@A[k, ])
         }
-        last_beta <- beta[, i]
+        beta[, i] <- last_beta <- scaling[i]* beta[, i]
     }
     dimnames(beta) <- list(rownames(hmm@B), seq_along(x))
     return(beta)
@@ -105,9 +106,9 @@ setMethod("backward", signature=c(hmm="HMM", x="numeric"), function(hmm, x) {
 
 setMethod("forwardBackward", signature=c("HMM", x="numeric"), function(hmm, x) {
     fwd <- forward(hmm, x)
-    bwd <- backward(hmm, x)
-    p_fwd <- fwd[, length(x)]
-    posterior <- (fwd * bwd) / sum(p_fwd)
+    bwd <- backward(hmm, x, fwd$scaling)
+    alpha_beta <- fwd$alpha * bwd
+    posterior <- sweep(alpha_beta, 2, colSums(alpha_beta), "/")
     return(posterior)
 })
 
