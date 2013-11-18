@@ -72,7 +72,7 @@ setMethod("forward", signature=c(hmm="HMM", x="numeric"), function(hmm, x) {
     L <- length(x)
     alpha <- matrix(0, nrow=nrow(hmm@A), ncol=L)
     scaling <- numeric(L)
-    last_alpha <- alpha[, 1] <- hmm@A0# * hmm@B[, x[1]]
+    last_alpha <- alpha[, 1] <- hmm@A0
 
     # main recursion component
     for (i in seq_along(x)) {
@@ -112,11 +112,11 @@ setMethod("forwardBackward", signature=c("HMM", x="numeric"), function(hmm, x) {
     return(posterior)
 })
 
-plotPosterior <- function(sims, posterior) {
+plotPosterior <- function(states, posterior) {
     postdf <- data.frame(t(posterior))
     postdf$max <- factor(apply(postdf, 1, which.max), labels=rownames(posterior))
     postdf$i <- seq_len(ncol(posterior))
-    postdf$state <- sims$states
+    postdf$state <- states
     p <- ggplot(postdf) + geom_line(aes_string(x="i", y=colnames(postdf)[1])) + geom_rug(aes(x=i, color=state))
     p <- p + ylab(sprintf("posterior probability of %s", colnames(postdf)[1]))
     p + xlab("index")
